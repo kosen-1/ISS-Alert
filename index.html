@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#080818">
+  <title>ISS Alert</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.1.3/satellite.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+    // 端末に合わせて案内文を出し分ける（Android 以外は iPhone 向けの文を表示）
+    const IS_ANDROID = /Android/i.test(navigator.userAgent);
+    document.documentElement.classList.add(IS_ANDROID ? 'android' : 'ios');
+  </script>
+  <style>
+    .android .ios-only, .ios .android-only { display: none; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #080818;
+      color: #dde0ff;
+      min-height: 100vh;
+      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+      -webkit-text-size-adjust: 100%;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0 6px;
+      border-bottom: 1px solid #2a2a5a;
+    }
+    header h1 { font-size: 17px; font-weight: 600; }
+    .badge {
+      background: #1d4ed8; color: #fff;
+      font-size: 12px; padding: 3px 8px; border-radius: 4px;
+    }
+
+    main { max-width: 480px; margin: 0 auto; padding: 8px 0 32px; }
+
+    .card {
+      background: #11112e;
+      border: 1px solid #2a2a5a;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .card label.title { display: block; color: #9ca3d8; font-size: 12px; margin-bottom: 4px; }
+
+    input[type="datetime-local"] {
+      width: 100%;
+      font-size: 16px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid #3a3a7a;
+      background: #0b0b20;
+      color: #eef0ff;
+      -webkit-appearance: none;
+      appearance: none;
+      min-height: 36px;
+    }
+
+    .quick { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .quick button {
+      flex: 1;
+      background: #1e1e45; color: #c8ccf0;
+      border: 1px solid #3a3a7a; border-radius: 6px;
+      font-size: 13px; padding: 5px 4px;
+    }
+
+    .opt { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; color: #c8ccf0; }
+    .opt input { width: 16px; height: 16px; }
+
+    .countdown {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px 8px 12px;
+    }
+    .countdown .cd-text { flex: 1; min-width: 0; text-align: center; }
+    .countdown canvas { display: block; }
+    .cd-sky { flex-shrink: 0; width: 124px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .cd-clock { font-size: 12px; font-weight: 700; color: #eef0ff; font-variant-numeric: tabular-nums; }
+    .cd-times { width: 100%; display: flex; justify-content: space-between; gap: 6px; font-size: 10px; font-variant-numeric: tabular-nums; }
+    .cd-times b { display: block; font-size: 11px; color: #eef0ff; }
+    .cd-times .aos { color: #4ade80; }
+    .cd-times .los { color: #f87171; text-align: right; }
+    .countdown .phase { font-size: 13px; color: #9ca3d8; min-height: 17px; }
+    .countdown .big {
+      font-size: 40px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #eef0ff;
+      line-height: 1.1;
+      margin: 2px 0;
+    }
+    .countdown.active .big { color: #fcd34d; }
+    .countdown.done .big   { color: #4ade80; }
+    .countdown .target { font-size: 13px; color: #b0b6e0; white-space: pre-line; }
+    .countdown .last { font-size: 13px; color: #60a5fa; margin-top: 2px; min-height: 17px; }
+
+    .btns { display: flex; gap: 8px; }
+    .btns button {
+      flex: 1;
+      font-size: 16px; font-weight: 600;
+      padding: 9px 6px; border: none; border-radius: 8px;
+      color: #fff;
+    }
+    #startBtn { background: #1d4ed8; flex: 2; }
+    #stopBtn  { background: #7f1d1d; }
+    #testBtn  { background: #1e1e45; color: #c8ccf0; border: 1px solid #3a3a7a; font-size: 14px; }
+    .btns button:disabled { background: #1e2a3a; color: #556; }
+
+    .note { font-size: 12px; color: #9098c8; line-height: 1.7; }
+    .note li { margin-left: 1.2em; }
+    .warn { color: #fca5a5; font-size: 12px; margin: 4px 0 8px; }
+    .warn:empty { display: none; }
+
+    .pass-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .pass-head .title { margin: 0; flex: 1 1 100%; color: #9ca3d8; font-size: 13px; }
+    .obs-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; font-size: 13px; color: #c8ccf0; }
+    .obs-row .where { flex: 1; min-width: 150px; }
+    .obs-row .where b { color: #eef0ff; }
+    .small-btn:disabled { color: #556; }
+    .status { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+    .status.loading { background: #1e3a5f; color: #60a5fa; }
+    .status.ok      { background: #14532d; color: #4ade80; }
+    .status.error   { background: #450a0a; color: #f87171; }
+    .small-btn {
+      background: #1e1e45; color: #c8ccf0; border: 1px solid #3a3a7a;
+      border-radius: 6px; font-size: 13px; padding: 4px 10px;
+    }
+    .pass-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .pass-card {
+      background: #11112e;
+      border: 1px solid #22224a;
+      border-radius: 8px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .pass-card.active { border-color: #2563eb; background: #131840; }
+    .pass-info { flex: 1; min-width: 0; }
+    .pass-card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; margin-bottom: 7px; gap: 4px 8px;
+    }
+    .pass-date  { font-size: 17px; color: #eef0ff; font-weight: 700; white-space: nowrap; }
+    .pass-date-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; }
+    .pass-maxel { font-size: 22px; font-weight: 700; line-height: 1; white-space: nowrap; }
+    .pass-maxel span { font-size: 13px; font-weight: 400; color: #a0a8e0; margin-left: 2px; }
+    .vis-tag {
+      display: inline-block; font-size: 11px; padding: 1px 7px;
+      border-radius: 3px; margin-left: 6px; vertical-align: 1px;
+    }
+    .vis-tag.yes { background: #3b2f07; color: #fcd34d; }
+    .vis-tag.no  { background: #22224a; color: #9ca3d8; }
+    .vis-window { font-size: 13px; color: #fcd34d; margin-top: 6px; }
+    .pass-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; font-size: 13px; }
+    .col.center { text-align: center; }
+    .col.right  { text-align: right; }
+    .col label  { display: block; color: #9ca3d8; margin-bottom: 2px; font-size: 12px; }
+    .col .t     { color: #b0bcff; font-weight: 600; font-size: 14px; }
+    .col .az    { color: #b0b6e0; font-size: 13px; }
+    .pass-minimap { flex-shrink: 0; width: 88px; height: 88px; }
+    .pass-minimap canvas { display: block; border-radius: 50%; }
+    body.running .pass-card { opacity: 0.5; }
+    .map-card { padding: 0; overflow: hidden; }
+    #map { height: 130px; background: #0b0b20; }
+    .map-info {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px;
+      padding: 5px 10px; font-size: 10px; color: #9ca3d8;
+    }
+    .map-info b { display: block; color: #b0bcff; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .map-legend { display: flex; gap: 8px; align-items: center; padding: 0 10px 5px; font-size: 10px; color: #9098c8; flex-wrap: wrap; }
+    .map-legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
+    .map-legend label { margin-left: auto; display: flex; align-items: center; gap: 4px; color: #c8ccf0; }
+    .iss-icon { font-size: 22px; line-height: 22px; text-align: center; filter: drop-shadow(0 0 3px #000); }
+    .leaflet-container { font-family: inherit; }
+    .leaflet-control-attribution { font-size: 9px; }
+    .no-data { color: #9098c8; font-size: 14px; padding: 8px 0; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🛰 ISS Alert</h1>
+  <span class="badge">カウントダウン</span>
+</header>
+
+<main>
+  <div class="card map-card">
+    <div id="map"></div>
+    <div class="map-info">
+      <div>緯度<b id="lvLat">—</b></div>
+      <div>経度<b id="lvLon">—</b></div>
+      <div>高度<b id="lvAlt">—</b></div>
+      <div>仰角 / 方位<b id="lvLook">—</b></div>
+      <div>日照<b id="lvSun">—</b></div>
+      <div>次の AOS まで<b id="lvNext">—</b></div>
+    </div>
+    <div class="map-legend">
+      <span><i style="border-color:#fcd34d"></i>今後 90 分</span>
+      <span><i style="border-color:#6b7280;border-top-style:dashed"></i>過去 30 分</span>
+      <span>◯ 可視範囲(10°)</span>
+      <label><input type="checkbox" id="follow" checked>追従</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <label class="title" for="target">目標時刻（パス一覧から自動設定・手入力可）</label>
+    <input type="datetime-local" id="target" step="1">
+    <div class="quick">
+      <button data-min="1">+1分後</button>
+      <button data-min="6">+6分後</button>
+      <button data-min="10">+10分後</button>
+    </div>
+    <label class="opt"><input type="checkbox" id="lastTen">最後の10秒は1秒ごとに読み上げ</label>
+  </div>
+
+  <div class="card countdown" id="cd">
+    <div class="cd-text">
+      <div class="phase" id="phase">「開始」を押してください</div>
+      <div class="big" id="big">--:--</div>
+      <div class="target" id="targetLabel"></div>
+      <div class="last" id="last"></div>
+    </div>
+    <div class="cd-sky">
+      <div class="cd-clock" id="cdClock">--/-- --:--:--</div>
+      <canvas id="cdSky" data-size="106"></canvas>
+      <div class="cd-times">
+        <div class="aos">AOS<b id="cdAos">--:--:--</b></div>
+        <div class="los">LOS<b id="cdLos">--:--:--</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="btns" style="margin-bottom:8px">
+    <button id="startBtn">開始</button>
+    <button id="stopBtn" disabled>停止</button>
+    <button id="testBtn">🔊 テスト</button>
+  </div>
+  <div class="warn" id="warn"></div>
+
+  <div class="card">
+    <div class="pass-head">
+      <span class="title" id="passTitle">ISS パス予測（南国市・仰角 ≥ 10°・3 日間）</span>
+      <span id="tleStatus" class="status loading">TLE 取得中…</span>
+      <button id="refreshBtn" class="small-btn">更新</button>
+    </div>
+    <div class="obs-row">
+      <span class="where">📍 観測地点：<b id="obsLabel">南国市</b></span>
+      <button id="geoBtn" class="small-btn">📍 現在地</button>
+      <button id="homeBtn" class="small-btn">南国市に戻す</button>
+    </div>
+    <div class="warn" id="geoWarn"></div>
+    <label class="opt" style="margin-top:0"><input type="checkbox" id="visOnly">目視可能なパスのみ</label>
+    <div id="passList" class="pass-list"></div>
+  </div>
+
+  <div class="card note">
+    <ul>
+      <li>起動時に次の ISS パスの最大仰角時刻を自動で目標に設定します。パスをタップすると切り替えられます。</li>
+      <li>観測地点は南国市です。「📍 現在地」で端末の位置に切り替えると、その地点でパスを計算し直します（地点は端末に記憶します）。</li>
+      <li>指定時刻の 5 分前から 5 秒ごとに「あと○秒」、通過後は 5 分間「○秒経過」と読み上げます。</li>
+      <li class="ios-only">iPhone では最初に「開始」か「🔊 テスト」をタップしないと音声が出ません。</li>
+      <li class="ios-only">カウントダウン中は Safari を前面に表示したままにしてください（画面ロック・アプリ切替で停止します）。対応機種では自動で画面スリープを防止します。</li>
+      <li class="ios-only">音量ボタンで音量を上げ、消音モードも確認してください。</li>
+      <li class="android-only">最初に「🔊 テスト」で「あと300秒」と聞こえるか確認してください。</li>
+      <li class="android-only">声が出ない・日本語にならない場合は、端末の「設定」→「システム」→「言語と入力」→「テキスト読み上げの出力」で「Google 音声サービス」の日本語音声データをインストールしてください（項目名は機種により異なります）。</li>
+      <li class="android-only">カウントダウン中は Chrome を前面に表示したままにしてください（画面オフ・アプリ切替で停止します）。画面スリープは自動で防止します。</li>
+      <li class="android-only">音量ボタンで「メディア」の音量を上げ、マナーモードも確認してください。</li>
+    </ul>
+  </div>
+</main>
+
+<script>
+  const LEAD_SEC = 300;      // 何秒前から読み上げるか
+  const STEP_SEC = 5;        // 読み上げ間隔
+  const TRAIL_SEC = 300;     // 通過後に何秒まで読み上げるか
+
+  const $ = id => document.getElementById(id);
+  const targetInput = $('target');
+
+  let targetMs = null;
+  let schedule = [];         // 読み上げる残り秒数（降順）
+  let nextIdx = 0;
+  let timer = null;
+  let wakeLock = null;
+  let jaVoice = null;
+  let selectedPass = null;   // パス一覧から選んだ場合のみセット
+
+  // ---------- 時刻入力 ----------
+  const pad = n => String(n).padStart(2, '0');
+  function toLocalInput(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  function setRelative(min) {
+    const d = new Date(Date.now() + min * 60000);
+    d.setMilliseconds(0);
+    targetInput.value = toLocalInput(d);
+  }
+  document.querySelectorAll('.quick button').forEach(b =>
+    b.addEventListener('click', () => { setRelative(Number(b.dataset.min)); selectPass(null); }));
+  targetInput.addEventListener('input', () => selectPass(null));
+  setRelative(6);
+
+  // ---------- 音声 ----------
+  function pickVoice() {
+    const vs = speechSynthesis.getVoices().filter(v => v.lang && v.lang.replace('_','-').startsWith('ja'));
+    jaVoice = vs.find(v => v.localService) || vs[0] || null;
+  }
+  pickVoice();
+  speechSynthesis.onvoiceschanged = pickVoice;
+
+  function speak(text) {
+    speechSynthesis.cancel();              // 前の読み上げが残っていたら打ち切る
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP';
+    if (jaVoice) u.voice = jaVoice;
+    u.rate = 1.1;
+    u.volume = 1;
+    speechSynthesis.speak(u);
+    $('last').textContent = '🔊 ' + text;
+  }
+
+  function phrase(sec) {
+    return `あと${sec}秒`;
+  }
+
+  // ---------- 画面スリープ防止 ----------
+  const SLEEP_HINT = IS_ANDROID
+    ? '「設定」→「ディスプレイ」→「画面消灯」を長めにしてください。'
+    : '自動ロックを「なし」にしてください。';
+  async function acquireWakeLock() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        $('warn').textContent = '';
+      } else {
+        $('warn').textContent = '※ この端末は画面スリープ防止に未対応です。' + SLEEP_HINT;
+      }
+    } catch (e) {
+      $('warn').textContent = '※ 画面スリープ防止に失敗しました。' + SLEEP_HINT;
+    }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && timer) acquireWakeLock();
+  });
+
+  // ---------- カウントダウン ----------
+  function buildSchedule() {
+    const s = [];
+    const fine = $('lastTen').checked;
+    for (let t = LEAD_SEC; t > 0; t -= STEP_SEC) {
+      if (fine && t < 10) continue;
+      s.push(t);
+    }
+    if (fine) for (let t = 9; t > 0; t--) s.push(t);
+    s.push(0);
+    for (let t = STEP_SEC; t <= TRAIL_SEC; t += STEP_SEC) s.push(-t);  // 通過後は負の値
+    return s;
+  }
+
+  function fmt(sec) {
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  }
+
+  function tick() {
+    const remMs = targetMs - Date.now();
+    const remSec = Math.ceil(remMs / 1000);
+    const cd = $('cd');
+
+    // 読み上げ判定：残り時間がスケジュール値を下回った瞬間に読む
+    while (nextIdx < schedule.length && remMs <= schedule[nextIdx] * 1000) {
+      const s = schedule[nextIdx];
+      // 2秒以上遅れたもの（復帰直後など）は読まずに飛ばす
+      if (remMs > (s - 2) * 1000) speak(s === 0 ? zeroPhrase() : s > 0 ? phrase(s) : `${-s}秒経過`);
+      nextIdx++;
+    }
+
+    if (remMs <= 0) {
+      const elapsed = Math.floor(-remMs / 1000);
+      $('big').textContent = '+' + fmt(Math.min(elapsed, TRAIL_SEC));
+      cd.className = 'card countdown done';
+      if (elapsed < 3) {
+        $('phase').textContent = '🛰 ISS 通過時刻です';
+      } else {
+        $('phase').textContent = '通過後の経過時間';
+      }
+      if (nextIdx >= schedule.length && remMs <= -TRAIL_SEC * 1000 - 2000) {
+        $('phase').textContent = '終了しました';
+        finish(false);
+      }
+      return;
+    }
+
+    $('big').textContent = fmt(remSec);
+    if (remSec > LEAD_SEC) {
+      $('phase').textContent = `待機中（残り ${LEAD_SEC / 60} 分で読み上げ開始）`;
+      cd.className = 'card countdown';
+    } else {
+      $('phase').textContent = 'カウントダウン中';
+      cd.className = 'card countdown active';
+    }
+  }
+
+  function start() {
+    if (!targetInput.value) { alert('時刻を入力してください'); return; }
+    const t = new Date(targetInput.value).getTime();
+    if (isNaN(t)) { alert('時刻が不正です'); return; }
+    if (t <= Date.now()) { alert('過去の時刻です'); return; }
+
+    targetMs = t;
+    schedule = buildSchedule();
+    // すでに過ぎた読み上げ点は除外（5分を切ってから開始した場合）
+    const remMs = targetMs - Date.now();
+    nextIdx = schedule.findIndex(s => s * 1000 < remMs);
+    if (nextIdx < 0) nextIdx = schedule.length;
+
+    const d = new Date(targetMs);
+    if (!selectedPass) $('targetLabel').textContent = `目標 ${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+    // タップ操作の中で一度話すことで iOS の音声ロックを解除する
+    speak('カウントダウンを開始します' +
+      (selectedPass ? `。最大仰角${Math.round(selectedPass.maxEl)}度、${dirJa(selectedPass.maxElAz)}の空です` : ''));
+    acquireWakeLock();
+
+    $('startBtn').disabled = true;
+    $('stopBtn').disabled = false;
+    targetInput.disabled = true;
+    $('lastTen').disabled = true;
+    $('geoBtn').disabled = $('homeBtn').disabled = true;
+    document.body.classList.add('running');
+
+    clearInterval(timer);
+    timer = setInterval(tick, 100);
+    tick();
+  }
+
+  function finish(manual) {
+    clearInterval(timer);
+    timer = null;
+    releaseWakeLock();
+    $('startBtn').disabled = false;
+    $('stopBtn').disabled = true;
+    targetInput.disabled = false;
+    $('lastTen').disabled = false;
+    $('geoBtn').disabled = $('homeBtn').disabled = false;
+    document.body.classList.remove('running');
+    if (!manual) setTimeout(autoSelect, 3000);   // 終了後は次のパスへ
+    if (manual) {
+      speechSynthesis.cancel();
+      $('phase').textContent = '停止しました';
+      $('big').textContent = '--:--';
+      $('cd').className = 'card countdown';
+      $('last').textContent = '';
+    }
+  }
+
+  $('startBtn').addEventListener('click', start);
+  $('stopBtn').addEventListener('click', () => finish(true));
+  $('testBtn').addEventListener('click', () => speak(phrase(300)));
+
+  // ================= ISS パス予測（iPhone-ISS と同じ計算） =================
+  // 観測地点：既定は南国市役所。「現在地」で取得した地点は端末に記憶する
+  const HOME_OBS = { name: '南国市', lat: 33.575635, lon: 133.641448, h: 0.01 };
+  const OBS_KEY  = 'iss-alert-obs';
+  let obs = HOME_OBS;
+  try {
+    const o = JSON.parse(localStorage.getItem(OBS_KEY));
+    if (o && isFinite(o.lat) && isFinite(o.lon)) obs = o;
+  } catch (e) {}
+  const OBSERVER = {};      // satellite.js に渡す形（ラジアン・km）
+  function setObserverFields() {
+    OBSERVER.latitude  = satellite.degreesToRadians(obs.lat);
+    OBSERVER.longitude = satellite.degreesToRadians(obs.lon);
+    OBSERVER.height    = obs.h;
+  }
+  setObserverFields();
+  const NORAD_ID   = 25544;
+  const MIN_EL     = 10;
+  const SUN_EL_MAX = -6;
+  const PASS_STEP_MS = 15 * 1000;
+  const HOURS      = 72;
+  const EARTH_R    = 6378.137;
+  const AU_KM      = 149597870.7;
+
+  let satrec = null;
+
+  // ---------- 地図 ----------
+  const OBS_LATLON = [obs.lat, obs.lon];
+  const map = L.map('map', { zoomControl: false, worldCopyJump: false, attributionControl: true })
+    .setView(OBS_LATLON, 2);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 8, minZoom: 1,
+    attribution: 'Tiles &copy; Esri',
+  }).addTo(map);
+  L.control.zoom({ position: 'topright' }).addTo(map);
+  const obsMarker = L.circleMarker(OBS_LATLON, { radius: 5, color: '#fff', weight: 2, fillColor: '#ef4444', fillOpacity: 1 })
+    .addTo(map).bindTooltip(obs.name, { direction: 'right', offset: [6, 0] });
+  const pastLine   = L.polyline([], { color: '#6b7280', weight: 2, dashArray: '4 4' }).addTo(map);
+  const futureLine = L.polyline([], { color: '#fcd34d', weight: 2 }).addTo(map);
+  const footprint  = L.circle(OBS_LATLON, { radius: 1, color: '#60a5fa', weight: 1, fillOpacity: 0.08 }).addTo(map);
+  const issMarker  = L.marker(OBS_LATLON, {
+    icon: L.divIcon({ className: 'iss-icon', html: '🛰', iconSize: [24, 24], iconAnchor: [12, 12] }),
+    opacity: 0,
+  }).addTo(map);
+  let trackAt = 0;
+  // 地図をドラッグしたら追従を解除
+  map.on('dragstart', () => { $('follow').checked = false; });
+
+  function subPoint(date) {
+    const pv = satellite.propagate(satrec, date);
+    if (!pv.position || pv.position.x === null) return null;
+    const gmst = satellite.gstime(date);
+    const geo  = satellite.eciToGeodetic(pv.position, gmst);
+    return { lat: satellite.degreesLat(geo.latitude), lon: satellite.degreesLong(geo.longitude), h: geo.height, pos: pv.position, gmst };
+  }
+  // 経度を基準経度に連続させる（日付変更線で線が飛ばないように）
+  function unwrap(lon, ref) {
+    while (lon - ref > 180) lon -= 360;
+    while (lon - ref < -180) lon += 360;
+    return lon;
+  }
+  function trackLine(t0, fromMin, toMin, refLon) {
+    const pts = [];
+    let prev = refLon;
+    for (let m = fromMin; m <= toMin; m += 0.5) {
+      const sp = subPoint(new Date(t0 + m * 60000));
+      if (!sp) continue;
+      prev = unwrap(sp.lon, prev);
+      pts.push([sp.lat, prev]);
+    }
+    return pts;
+  }
+
+  function updateMap() {
+    if (!satrec) return;
+    const now = new Date();
+    const sp = subPoint(now);
+    if (!sp) return;
+    // 表示中の地図の中心に近い側の経度を使う
+    const lon = $('follow').checked ? sp.lon : unwrap(sp.lon, map.getCenter().lng);
+    const ll = [sp.lat, lon];
+    issMarker.setLatLng(ll).setOpacity(1);
+
+    // 仰角 10° 以上で見える範囲（地心角）
+    const e = MIN_EL * Math.PI / 180;
+    const ang = Math.acos(EARTH_R * Math.cos(e) / (EARTH_R + sp.h)) - e;
+    footprint.setLatLng(ll).setRadius(ang * EARTH_R * 1000);
+
+    // 地上軌跡は 20 秒ごとに再計算し、マーカーと同じ 360° 周期側に寄せて描く
+    if (now - trackAt > 20000) {
+      trackAt = now.getTime();
+      updateMap.baseLon = sp.lon;
+      updateMap.past   = trackLine(trackAt, -30, 0, sp.lon);
+      updateMap.future = trackLine(trackAt, 0, 90, sp.lon);
+    }
+    const adj = Math.round((lon - updateMap.baseLon) / 360) * 360;
+    pastLine.setLatLngs(updateMap.past.map(([a, b]) => [a, b + adj]));
+    futureLine.setLatLngs(updateMap.future.map(([a, b]) => [a, b + adj]));
+    if ($('follow').checked) map.panTo(ll, { animate: false });
+
+    // 数値表示
+    const look = lookAngles(now);
+    $('lvLat').textContent = `${Math.abs(sp.lat).toFixed(2)}° ${sp.lat >= 0 ? 'N' : 'S'}`;
+    $('lvLon').textContent = `${Math.abs(sp.lon).toFixed(2)}° ${sp.lon >= 0 ? 'E' : 'W'}`;
+    $('lvAlt').textContent = `${sp.h.toFixed(0)} km`;
+    $('lvLook').textContent = `${look.el.toFixed(1)}° / ${dirJa(look.az)}`;
+    $('lvSun').textContent = isSunlit(sp.pos, sunEci(now)) ? '☀ 日照' : '🌑 地球の影';
+    const next = allPasses.find(p => p.losTime > now);
+    let txt = '—';
+    if (next) {
+      if (next.aosTime <= now) txt = '🛰 上空通過中';
+      else {
+        const s = Math.floor((next.aosTime - now) / 1000);
+        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+        txt = h ? `${h}時間${m}分` : `${m}分${pad(s % 60)}秒`;
+      }
+    }
+    $('lvNext').textContent = txt;
+  }
+  $('follow').addEventListener('change', () => { trackAt = 0; updateMap(); });
+  setInterval(updateMap, 1000);
+  // 時計（月日＋秒）とカウントダウン欄のマップ。通過中は 0.2 秒ごとに ISS の位置を更新
+  let cdLastSec = -1, cdLive = false;
+  setInterval(() => {
+    const now = new Date();
+    if (now.getSeconds() !== cdLastSec) {
+      cdLastSec = now.getSeconds();
+      $('cdClock').textContent = `${now.getMonth()+1}/${now.getDate()} ${hms(now)}`;
+      cdLive = drawCdSky();
+    } else if (cdLive) {
+      cdLive = drawCdSky();
+    }
+  }, 200);
+  let allPasses = [];
+  let shownPasses = [];
+
+  // TLE は端末に保存し、CelesTrak の利用ルール（同じデータは 2 時間に 1 回まで）を守る
+  const TLE_KEY = 'iss-alert-tle';
+  const TLE_MAX_AGE = 2 * 3600 * 1000;
+  const TLE_SOURCES = [
+    { name: 'CelesTrak',       url: `https://celestrak.org/NORAD/elements/gp.php?CATNR=${NORAD_ID}&FORMAT=TLE` },
+    { name: 'wheretheiss.at',  url: `https://api.wheretheiss.at/v1/satellites/${NORAD_ID}/tles?format=text` },
+  ];
+
+  function parseTLE(text) {
+    const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    const l1 = lines.find(l => l.startsWith('1 ')), l2 = lines.find(l => l.startsWith('2 '));
+    if (!l1 || !l2) throw new Error('TLE データが不正です');
+    return { line1: l1, line2: l2 };
+  }
+  function loadCachedTLE() {
+    try { return JSON.parse(localStorage.getItem(TLE_KEY)); } catch (e) { return null; }
+  }
+  function saveCachedTLE(tle) {
+    try { localStorage.setItem(TLE_KEY, JSON.stringify(tle)); } catch (e) {}
+  }
+
+  // 戻り値: { line1, line2, source, fetchedAt, stale }
+  async function fetchTLE() {
+    const cached = loadCachedTLE();
+    if (cached && Date.now() - cached.fetchedAt < TLE_MAX_AGE) return cached;
+    const errors = [];
+    for (const src of TLE_SOURCES) {
+      try {
+        const res = await fetch(src.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const tle = { ...parseTLE(await res.text()), source: src.name, fetchedAt: Date.now() };
+        saveCachedTLE(tle);
+        return tle;
+      } catch (e) {
+        errors.push(`${src.name}: ${e.message}`);
+      }
+    }
+    if (cached) return { ...cached, stale: true };     // 古くても無いよりまし
+    throw new Error(errors.join(' / '));
+  }
+
+  function sunEci(date) {
+    const n   = date.getTime() / 86400000 + 2440587.5 - 2451545.0;
+    const rad = Math.PI / 180;
+    const L   = (280.460 + 0.9856474 * n) * rad;
+    const g   = (357.528 + 0.9856003 * n) * rad;
+    const lam = L + (1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+    const eps = (23.439 - 0.0000004 * n) * rad;
+    const R   = (1.00014 - 0.01671 * Math.cos(g) - 0.00014 * Math.cos(2 * g)) * AU_KM;
+    return { x: R * Math.cos(lam), y: R * Math.cos(eps) * Math.sin(lam), z: R * Math.sin(eps) * Math.sin(lam) };
+  }
+  // 円柱影モデル：衛星が地球の影に入っていなければ true
+  function isSunlit(pos, sun) {
+    const sl = Math.hypot(sun.x, sun.y, sun.z);
+    const ux = sun.x / sl, uy = sun.y / sl, uz = sun.z / sl;
+    const d  = pos.x * ux + pos.y * uy + pos.z * uz;
+    if (d > 0) return true;
+    return Math.hypot(pos.x - d * ux, pos.y - d * uy, pos.z - d * uz) > EARTH_R;
+  }
+  function lookAngles(date) {
+    const pv = satellite.propagate(satrec, date);
+    if (!pv.position || pv.position.x === null) return null;
+    const gmst = satellite.gstime(date);
+    const lk   = satellite.ecfToLookAngles(OBSERVER, satellite.eciToEcf(pv.position, gmst));
+    return { el: satellite.radiansToDegrees(lk.elevation), az: satellite.radiansToDegrees(lk.azimuth), pos: pv.position, gmst };
+  }
+
+  // 軌跡点に日照・目視可否を付与
+  function withVisibility(look, date) {
+    const sun   = sunEci(date);
+    const sunEl = satellite.radiansToDegrees(
+      satellite.ecfToLookAngles(OBSERVER, satellite.eciToEcf(sun, look.gmst)).elevation);
+    const lit = isSunlit(look.pos, sun);
+    return { time: date, el: look.el, az: look.az, lit, visible: lit && sunEl <= SUN_EL_MAX };
+  }
+
+  function computePasses() {
+    const result = [];
+    const start = Date.now() - 10 * 60 * 1000;      // 通過中のパスも拾う
+    const end   = Date.now() + HOURS * 3600 * 1000;
+    let cur = null;
+    for (let t = start; t <= end; t += PASS_STEP_MS) {
+      const look = lookAngles(new Date(t));
+      if (!look) continue;
+      if (look.el >= MIN_EL) {
+        if (!cur) {
+          cur = { points: [], maxEl: -Infinity };
+          // AOS を 1 秒単位に詰める
+          let aosT = t;
+          for (let dt = PASS_STEP_MS - 1000; dt > 0; dt -= 1000) {
+            const l2 = lookAngles(new Date(t - dt));
+            if (l2 && l2.el >= MIN_EL) aosT = t - dt; else break;
+          }
+          cur.aosTime = new Date(aosT);
+          const aosL  = lookAngles(cur.aosTime);
+          cur.aosAz   = aosL ? aosL.az : look.az;
+        }
+        cur.points.push(withVisibility(look, new Date(t)));
+        if (look.el > cur.maxEl) { cur.maxEl = look.el; cur.maxT = t; }
+      } else if (cur) {
+        // LOS を 1 秒単位に詰める
+        let losT = t - PASS_STEP_MS;
+        for (let dt = 1000; dt < PASS_STEP_MS; dt += 1000) {
+          const l2 = lookAngles(new Date(t - PASS_STEP_MS + dt));
+          if (l2 && l2.el >= MIN_EL) losT = t - PASS_STEP_MS + dt; else break;
+        }
+        cur.losTime = new Date(losT);
+        const losL  = lookAngles(cur.losTime);
+        cur.losAz   = losL ? losL.az : cur.points.at(-1).az;
+        result.push(finishPass(cur));
+        cur = null;
+      }
+    }
+    if (cur) {
+      const last = cur.points.at(-1);
+      cur.losTime = last.time; cur.losAz = last.az;
+      result.push(finishPass(cur));
+    }
+    return result;
+  }
+  // 最大仰角時刻を 1 秒単位まで詰め、見える時間帯をまとめる
+  function finishPass(p) {
+    let best = { t: p.maxT, el: -Infinity, az: 0 };
+    for (let t = p.maxT - PASS_STEP_MS; t <= p.maxT + PASS_STEP_MS; t += 1000) {
+      const l = lookAngles(new Date(t));
+      if (l && l.el > best.el) best = { t, el: l.el, az: l.az };
+    }
+    p.maxElTime = new Date(Math.round(best.t / 1000) * 1000);
+    p.maxEl = best.el; p.maxElAz = best.az;
+    const vis = p.points.filter(q => q.visible);
+    p.visible = vis.length > 0;
+    if (p.visible) {
+      p.visStart = vis[0].time;
+      p.visEnd   = vis.at(-1).time;
+      p.visMaxEl = Math.max(...vis.map(q => q.el));
+    }
+    return p;
+  }
+
+  // ---------- スカイマップ（iPhone-ISS と同じ描画） ----------
+  // Retina でにじまないよう、表示サイズ × devicePixelRatio で描く
+  function prepCanvas(canvas) {
+    const size = Number(canvas.dataset.size);
+    const dpr  = window.devicePixelRatio || 1;
+    if (canvas.width !== size * dpr) {
+      canvas.width = canvas.height = size * dpr;
+      canvas.style.width = canvas.style.height = size + 'px';
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, W: size, H: size };
+  }
+  function toXY(az, el, cx, cy, R) {
+    const r = (90 - el) / 90 * R;
+    const angle = (az - 90) * Math.PI / 180;
+    return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r];
+  }
+  function drawPolarPlot(pass, canvas, large, live) {
+    const { ctx, W, H } = prepCanvas(canvas);
+    const cx = W / 2, cy = H / 2;
+    const R  = Math.min(cx, cy) - (large ? 12 : 6);
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.fillStyle = '#10122e';
+    ctx.beginPath(); ctx.arc(cx, cy, R + (large ? 11 : 5), 0, Math.PI * 2); ctx.fill();
+
+    for (const el of [0, 30, 60]) {
+      const r = (90 - el) / 90 * R;
+      ctx.strokeStyle = el === 0 ? '#7880c8' : '#4a5296';
+      ctx.lineWidth = el === 0 ? 1.5 : 1;
+      ctx.setLineDash(el === 0 ? [] : [3, 3]);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // 南北・東西の補助線
+    ctx.strokeStyle = '#33396e'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+    ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+    ctx.stroke();
+    ctx.fillStyle = '#7880c8';
+    ctx.beginPath(); ctx.arc(cx, cy, large ? 3 : 2, 0, Math.PI * 2); ctx.fill();
+
+    if (large) {
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const [lbl, az] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]]) {
+        const [x, y] = toXY(az, -7, cx, cy, R);
+        ctx.fillStyle = lbl === 'N' ? '#93c5fd' : '#e0e3ff';
+        ctx.fillText(lbl, x, y);
+      }
+    }
+    if (!pass || !pass.points.length) return;
+
+    // 軌跡：目視可能区間は黄色、影の中は破線、それ以外はグラデーション
+    const pts = pass.points, n = pts.length;
+    for (let i = 0; i < n - 1; i++) {
+      const t = i / Math.max(1, n - 1);
+      const [x1, y1] = toXY(pts[i].az,   pts[i].el,   cx, cy, R);
+      const [x2, y2] = toXY(pts[i+1].az, pts[i+1].el, cx, cy, R);
+      if (pts[i].visible && pts[i+1].visible) {
+        ctx.strokeStyle = '#fcd34d'; ctx.setLineDash([]);
+      } else if (!pts[i].lit) {
+        ctx.strokeStyle = '#6b70b0'; ctx.setLineDash([3, 3]);
+      } else {
+        ctx.strokeStyle = `rgb(${Math.round(t * 220)},${Math.round(180 - t * 120)},80)`; ctx.setLineDash([]);
+      }
+      ctx.lineWidth = large ? 2 : 1.5;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    const dotR = large ? 4 : 3;
+    const mkr = (az, el, color) => {
+      const [x, y] = toXY(az, el, cx, cy, R);
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x, y, dotR, 0, Math.PI * 2); ctx.fill();
+    };
+    mkr(pass.aosAz,   pass.points[0].el,     '#4ade80');
+    mkr(pass.maxElAz, pass.maxEl,            '#fbbf24');
+    mkr(pass.losAz,   pass.points.at(-1).el, '#f87171');
+
+    // 通過中は ISS の現在位置を重ねる
+    if (live && live.el > 0) {
+      const [x, y] = toXY(live.az, live.el, cx, cy, R);
+      const pulse = 1 + 0.5 * (0.5 + 0.5 * Math.sin(Date.now() / 200));
+      ctx.fillStyle = 'rgba(96,165,250,0.25)';
+      ctx.beginPath(); ctx.arc(x, y, 10 * pulse, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      ctx.fillStyle = '#60a5fa';
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+  }
+  // カウントダウン欄のマップ（選択中のパス＋現在位置）
+  function drawCdSky() {
+    let live = null;
+    if (selectedPass && satrec) {
+      const now = Date.now();
+      if (now >= selectedPass.aosTime - 60000 && now <= selectedPass.losTime.getTime() + 60000)
+        live = lookAngles(new Date(now));
+    }
+    drawPolarPlot(selectedPass, $('cdSky'), true, live);
+    $('cdAos').textContent = selectedPass ? hms(selectedPass.aosTime) : '--:--:--';
+    $('cdLos').textContent = selectedPass ? hms(selectedPass.losTime) : '--:--:--';
+    return !!live;
+  }
+
+  const DIR_JA = ['北','北北東','北東','東北東','東','東南東','南東','南南東',
+                  '南','南南西','南西','西南西','西','西北西','北西','北北西'];
+  function dirJa(az) { return DIR_JA[Math.round(az / 22.5) % 16]; }
+  function elColor(el) { return el >= 60 ? '#f59e0b' : el >= 30 ? '#34d399' : '#60a5fa'; }
+  function azDir(az) {
+    return ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(az / 22.5) % 16];
+  }
+  function jst(date, opts) { return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', ...opts }); }
+  function hms(date) { return jst(date, { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  function hm(date)  { return jst(date, { hour: '2-digit', minute: '2-digit' }); }
+
+  function zeroPhrase() {
+    if (selectedPass && targetMs === selectedPass.maxElTime.getTime())
+      return `いま、最大仰角です。${dirJa(selectedPass.maxElAz)}の空、${Math.round(selectedPass.maxEl)}度`;
+    return 'いま、真上です';
+  }
+
+  function renderPasses() {
+    const visOnly = $('visOnly').checked;
+    const now = Date.now();
+    shownPasses = allPasses.filter(p => p.maxElTime.getTime() > now && (!visOnly || p.visible));
+    const el = $('passList');
+    if (!shownPasses.length) {
+      el.innerHTML = `<div class="no-data">今後 3 日間に${visOnly ? '目視可能な' : ''}パスはありません</div>`;
+      return;
+    }
+    el.innerHTML = shownPasses.map((p, i) => {
+      const dateStr = jst(p.aosTime, { month: 'long', day: 'numeric', weekday: 'short' });
+      const tag = p.visible
+        ? '<span class="vis-tag yes">👁 目視可能</span>'
+        : '<span class="vis-tag no">目視不可</span>';
+      const win = p.visible
+        ? `<div class="vis-window">見える時間帯 ${hm(p.visStart)} 〜 ${hm(p.visEnd)}（最大 ${p.visMaxEl.toFixed(0)}°）</div>`
+        : '';
+      return `
+      <div class="pass-card${selectedPass === p ? ' active' : ''}" data-i="${i}">
+        <div class="pass-info">
+          <div class="pass-card-header">
+            <span class="pass-date-wrap"><span class="pass-date">Pass ${i+1} &mdash; ${dateStr}</span>${tag}</span>
+            <span class="pass-maxel" style="color:${elColor(p.maxEl)}">${p.maxEl.toFixed(1)}<span>° 最大仰角</span></span>
+          </div>
+          <div class="pass-row">
+            <div class="col">
+              <label>AOS</label>
+              <div class="t">${hms(p.aosTime)}</div>
+              <div class="az">${p.aosAz.toFixed(0)}° ${azDir(p.aosAz)}</div>
+            </div>
+            <div class="col center">
+              <label>最大仰角</label>
+              <div class="t">${hms(p.maxElTime)}</div>
+              <div class="az">${p.maxElAz.toFixed(0)}° ${azDir(p.maxElAz)}</div>
+            </div>
+            <div class="col right">
+              <label>LOS</label>
+              <div class="t">${hms(p.losTime)}</div>
+              <div class="az">${p.losAz.toFixed(0)}° ${azDir(p.losAz)}</div>
+            </div>
+          </div>
+          ${win}
+        </div>
+        <div class="pass-minimap"><canvas id="mini${i}" data-size="88"></canvas></div>
+      </div>`;
+    }).join('');
+    shownPasses.forEach((p, i) => drawPolarPlot(p, $(`mini${i}`), false));
+  }
+  $('passList').addEventListener('click', e => {
+    const card = e.target.closest('.pass-card');
+    if (!card || timer) return;          // カウントダウン中は切り替えない
+    selectPass(shownPasses[Number(card.dataset.i)]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  function selectPass(p) {
+    selectedPass = p;
+    if (p) {
+      targetInput.value = toLocalInput(p.maxElTime);
+      const d = p.maxElTime;
+      $('targetLabel').textContent =
+        `最大仰角 ${p.maxEl.toFixed(0)}°・${dirJa(p.maxElAz)}\n${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      if (!timer) $('phase').textContent = '「開始」を押してください';
+    } else if (!timer) {
+      $('targetLabel').textContent = '';
+    }
+    renderPasses();
+    drawCdSky();
+  }
+  // 一覧の先頭（＝次のパス）を目標にする。手入力中や実行中は触らない
+  function autoSelect() {
+    if (timer) return;
+    renderPasses();
+    if (shownPasses.length) selectPass(shownPasses[0]);
+  }
+  $('visOnly').addEventListener('change', autoSelect);
+
+  async function refreshTLE() {
+    const st = $('tleStatus');
+    $('refreshBtn').disabled = true;
+    st.className = 'status loading'; st.textContent = 'TLE 取得中…';
+    try {
+      const tle = await fetchTLE();
+      satrec = satellite.twoline2satrec(tle.line1, tle.line2);
+      allPasses = computePasses();
+      trackAt = 0;
+      updateMap();
+      const ft = new Date(tle.fetchedAt);
+      st.className = tle.stale ? 'status error' : 'status ok';
+      st.textContent = `${tle.stale ? '⚠ 取得失敗・保存データ ' : 'TLE '}${ft.getMonth()+1}/${ft.getDate()} ${pad(ft.getHours())}:${pad(ft.getMinutes())}（${tle.source}）`;
+      autoSelect();
+    } catch (e) {
+      st.className = 'status error'; st.textContent = 'エラー: ' + e.message;
+      $('passList').innerHTML = `<div class="no-data">パス予測を取得できませんでした。時刻は手入力してください。</div>`;
+    }
+    $('refreshBtn').disabled = false;
+  }
+  $('refreshBtn').addEventListener('click', refreshTLE);
+
+  // ---------- 観測地点の切り替え ----------
+  function obsText() {
+    return obs.name === HOME_OBS.name ? HOME_OBS.name
+      : `${obs.name}（${Math.abs(obs.lat).toFixed(2)}°${obs.lat >= 0 ? 'N' : 'S'}, ${Math.abs(obs.lon).toFixed(2)}°${obs.lon >= 0 ? 'E' : 'W'}）`;
+  }
+  function showObs() {
+    $('obsLabel').textContent = obsText();
+    $('passTitle').textContent = `ISS パス予測（${obs.name}・仰角 ≥ ${MIN_EL}°・3 日間）`;
+    obsMarker.setLatLng([obs.lat, obs.lon]).setTooltipContent(obs.name);
+    $('homeBtn').style.display = obs.name === HOME_OBS.name ? 'none' : '';
+  }
+  function setObserver(o) {
+    obs = o;
+    try {
+      if (o === HOME_OBS) localStorage.removeItem(OBS_KEY);
+      else localStorage.setItem(OBS_KEY, JSON.stringify(o));
+    } catch (e) {}
+    setObserverFields();
+    showObs();
+    if (satrec) {
+      allPasses = computePasses();
+      selectedPass = null;
+      autoSelect();
+      updateMap();
+    }
+  }
+  $('geoBtn').addEventListener('click', () => {
+    if (timer) return;
+    const warn = $('geoWarn');
+    if (!('geolocation' in navigator)) { warn.textContent = '※ この端末は位置情報に対応していません。'; return; }
+    $('geoBtn').disabled = true;
+    $('geoBtn').textContent = '取得中…';
+    warn.textContent = '';
+    navigator.geolocation.getCurrentPosition(pos => {
+      const c = pos.coords;
+      setObserver({
+        name: '現在地',
+        lat: Math.round(c.latitude * 1e5) / 1e5,
+        lon: Math.round(c.longitude * 1e5) / 1e5,
+        h: Math.max(0, (c.altitude || 0) / 1000),
+      });
+      map.setView([obs.lat, obs.lon], map.getZoom(), { animate: false });
+      $('geoBtn').disabled = false; $('geoBtn').textContent = '📍 現在地';
+    }, err => {
+      warn.textContent = err.code === 1
+        ? (IS_ANDROID
+          ? '※ 位置情報が許可されていません。Chrome のアドレスバー左のアイコン →「権限」→「位置情報」を許可するか、Chrome の「設定」→「サイトの設定」→「位置情報」でこのサイトを許可し、ページを再読み込みしてください。端末の位置情報（クイック設定の「位置情報」）がオンかも確認してください。'
+          : '※ 位置情報が許可されていません。iPhone の「設定」→「プライバシーとセキュリティ」→「位置情報サービス」→「Safari の Web サイト」を「使用中のみ」にし、ページを再読み込みしてください。')
+        : IS_ANDROID
+          ? '※ 現在地を取得できませんでした。端末の位置情報がオンになっているか確認し、屋外や Wi-Fi のある場所でもう一度お試しください。'
+          : '※ 現在地を取得できませんでした。屋外や Wi-Fi のある場所でもう一度お試しください。';
+      $('geoBtn').disabled = false; $('geoBtn').textContent = '📍 現在地';
+    }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
+  });
+  $('homeBtn').addEventListener('click', () => { if (!timer) { $('geoWarn').textContent = ''; setObserver(HOME_OBS); } });
+  showObs();
+  refreshTLE();
+</script>
+</body>
+</html>
