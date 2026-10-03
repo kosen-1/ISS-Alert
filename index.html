@@ -185,10 +185,6 @@
     .leaflet-control-attribution { font-size: 9px; }
     .no-data { color: #9098c8; font-size: 14px; padding: 8px 0; }
     .dop-head { display: flex; align-items: center; gap: 8px; color: #9ca3d8; font-size: 12px; }
-    .dop-head select {
-      background: #0b0b20; color: #eef0ff; border: 1px solid #3a3a7a; border-radius: 6px;
-      font-size: 13px; padding: 2px 4px; min-width: 0; flex: 1;
-    }
     .dop-tag { margin-left: auto; white-space: nowrap; font-size: 11px; padding: 1px 7px; border-radius: 3px; background: #22224a; color: #9ca3d8; }
     .dop-tag.up { background: #14532d; color: #4ade80; }
     .dop-freq {
@@ -227,12 +223,7 @@
 
   <div class="card">
     <div class="dop-head">
-      <span style="white-space:nowrap">ドップラー補正</span>
-      <select id="dopBand" aria-label="ダウンリンク周波数">
-        <option value="145.800">145.800 音声・SSTV</option>
-        <option value="145.825">145.825 APRS</option>
-        <option value="437.800">437.800 レピーター</option>
-      </select>
+      <span>レピーター下り 437.800 MHz 補正値</span>
       <span class="dop-tag" id="dopTag"></span>
     </div>
     <div class="dop-freq" id="dopFreq">---.-----<span>MHz</span></div>
@@ -295,7 +286,7 @@
       <li>起動時に次の ISS パスの最大仰角時刻を自動で目標に設定します。パスをタップすると切り替えられます。</li>
       <li>観測地点は南国市です。「📍 現在地」で端末の位置に切り替えると、その地点でパスを計算し直します（地点は端末に記憶します）。</li>
       <li>指定時刻の 5 分前から 5 秒ごとに「あと○秒」、通過後は 5 分間「○秒経過」と読み上げます。</li>
-      <li>上の欄に、ISS のダウンリンク（145.800 / 145.825 / 437.800 MHz から選択）をドップラー補正したリアルタイムの受信周波数を表示します（観測地点基準）。</li>
+      <li>上の欄に、ISS のクロスバンドレピーターの下り 437.800 MHz をドップラー補正したリアルタイムの受信周波数を表示します（観測地点基準）。</li>
       <li class="ios-only">iPhone では最初に「開始」か「🔊 テスト」をタップしないと音声が出ません。</li>
       <li class="ios-only">カウントダウン中は Safari を前面に表示したままにしてください（画面ロック・アプリ切替で停止します）。対応機種では自動で画面スリープを防止します。</li>
       <li class="ios-only">音量ボタンで音量を上げ、消音モードも確認してください。</li>
@@ -623,17 +614,9 @@
   // ---------- ダウンリンクのドップラー補正 ----------
   // 距離変化率 rr（遠ざかる向きが正）から受信周波数 f = f0 × (1 − rr / c) を求める。
   // 観測地点は ECF → ECI に回し、地球の自転による速度も入れる
+  const DOWNLINK_HZ = 437.800e6;    // クロスバンドレピーターの下り
   const C_KMS   = 299792.458;
   const OMEGA_E = 7.292115e-5;     // 地球の自転角速度 [rad/s]
-  const BAND_KEY = 'iss-alert-band';
-  try {
-    const b = localStorage.getItem(BAND_KEY);
-    if (b && [...$('dopBand').options].some(o => o.value === b)) $('dopBand').value = b;
-  } catch (e) {}
-  $('dopBand').addEventListener('change', () => {
-    try { localStorage.setItem(BAND_KEY, $('dopBand').value); } catch (e) {}
-    updateDoppler();
-  });
   function doppler(date, f0) {
     const pv = satellite.propagate(satrec, date);
     if (!pv.position || pv.position.x === null || !pv.velocity) return null;
@@ -649,7 +632,7 @@
   function updateDoppler() {
     if (!satrec) return;
     const now = new Date();
-    const f0 = Number($('dopBand').value) * 1e6;
+    const f0 = DOWNLINK_HZ;
     const d = doppler(now, f0), look = lookAngles(now);
     if (!d || !look) return;
     const up = look.el >= 0;
