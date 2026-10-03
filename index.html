@@ -184,6 +184,20 @@
     .leaflet-container { font-family: inherit; }
     .leaflet-control-attribution { font-size: 9px; }
     .no-data { color: #9098c8; font-size: 14px; padding: 8px 0; }
+    .dop-head { display: flex; align-items: center; gap: 8px; color: #9ca3d8; font-size: 12px; }
+    .dop-head select {
+      background: #0b0b20; color: #eef0ff; border: 1px solid #3a3a7a; border-radius: 6px;
+      font-size: 13px; padding: 2px 4px; min-width: 0; flex: 1;
+    }
+    .dop-tag { margin-left: auto; white-space: nowrap; font-size: 11px; padding: 1px 7px; border-radius: 3px; background: #22224a; color: #9ca3d8; }
+    .dop-tag.up { background: #14532d; color: #4ade80; }
+    .dop-freq {
+      font-size: 30px; font-weight: 700; line-height: 1.15; color: #eef0ff;
+      font-variant-numeric: tabular-nums; text-align: center;
+    }
+    .dop-freq span { font-size: 15px; font-weight: 400; color: #a0a8e0; margin-left: 4px; }
+    .dop-freq.below { color: #7880c8; }
+    .dop-sub { font-size: 12px; color: #b0b6e0; text-align: center; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -209,6 +223,20 @@
       <span>◯ 可視範囲(10°)</span>
       <label><input type="checkbox" id="follow" checked>追従</label>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="dop-head">
+      <span style="white-space:nowrap">ドップラー補正</span>
+      <select id="dopBand" aria-label="ダウンリンク周波数">
+        <option value="145.800">145.800 音声・SSTV</option>
+        <option value="145.825">145.825 APRS</option>
+        <option value="437.800">437.800 レピーター</option>
+      </select>
+      <span class="dop-tag" id="dopTag"></span>
+    </div>
+    <div class="dop-freq" id="dopFreq">---.-----<span>MHz</span></div>
+    <div class="dop-sub" id="dopSub">—</div>
   </div>
 
   <div class="card">
@@ -267,6 +295,7 @@
       <li>起動時に次の ISS パスの最大仰角時刻を自動で目標に設定します。パスをタップすると切り替えられます。</li>
       <li>観測地点は南国市です。「📍 現在地」で端末の位置に切り替えると、その地点でパスを計算し直します（地点は端末に記憶します）。</li>
       <li>指定時刻の 5 分前から 5 秒ごとに「あと○秒」、通過後は 5 分間「○秒経過」と読み上げます。</li>
+      <li>上の欄に、ISS のダウンリンク（145.800 / 145.825 / 437.800 MHz から選択）をドップラー補正したリアルタイムの受信周波数を表示します（観測地点基準）。</li>
       <li class="ios-only">iPhone では最初に「開始」か「🔊 テスト」をタップしないと音声が出ません。</li>
       <li class="ios-only">カウントダウン中は Safari を前面に表示したままにしてください（画面ロック・アプリ切替で停止します）。対応機種では自動で画面スリープを防止します。</li>
       <li class="ios-only">音量ボタンで音量を上げ、消音モードも確認してください。</li>
@@ -591,6 +620,48 @@
   }
   $('follow').addEventListener('change', () => { trackAt = 0; updateMap(); });
   setInterval(updateMap, 1000);
+  // ---------- ダウンリンクのドップラー補正 ----------
+  // 距離変化率 rr（遠ざかる向きが正）から受信周波数 f = f0 × (1 − rr / c) を求める。
+  // 観測地点は ECF → ECI に回し、地球の自転による速度も入れる
+  const C_KMS   = 299792.458;
+  const OMEGA_E = 7.292115e-5;     // 地球の自転角速度 [rad/s]
+  const BAND_KEY = 'iss-alert-band';
+  try {
+    const b = localStorage.getItem(BAND_KEY);
+    if (b && [...$('dopBand').options].some(o => o.value === b)) $('dopBand').value = b;
+  } catch (e) {}
+  $('dopBand').addEventListener('change', () => {
+    try { localStorage.setItem(BAND_KEY, $('dopBand').value); } catch (e) {}
+    updateDoppler();
+  });
+  function doppler(date, f0) {
+    const pv = satellite.propagate(satrec, date);
+    if (!pv.position || pv.position.x === null || !pv.velocity) return null;
+    const gmst = satellite.gstime(date);
+    const o = satellite.geodeticToEcf(OBSERVER);
+    const c = Math.cos(gmst), s = Math.sin(gmst);
+    const ox = o.x * c - o.y * s, oy = o.x * s + o.y * c, oz = o.z;
+    const dx = pv.position.x - ox, dy = pv.position.y - oy, dz = pv.position.z - oz;
+    const range = Math.hypot(dx, dy, dz);
+    const rr = (dx * (pv.velocity.x + OMEGA_E * oy) + dy * (pv.velocity.y - OMEGA_E * ox) + dz * pv.velocity.z) / range;
+    return { hz: f0 * (1 - rr / C_KMS), range, rr };
+  }
+  function updateDoppler() {
+    if (!satrec) return;
+    const now = new Date();
+    const f0 = Number($('dopBand').value) * 1e6;
+    const d = doppler(now, f0), look = lookAngles(now);
+    if (!d || !look) return;
+    const up = look.el >= 0;
+    const shift = (d.hz - f0) / 1000;
+    const sign = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+    $('dopFreq').firstChild.textContent = (d.hz / 1e6).toFixed(5);
+    $('dopFreq').classList.toggle('below', !up);
+    $('dopSub').textContent = `シフト ${sign(shift)} kHz・距離 ${d.range.toFixed(0)} km（${sign(d.rr)} km/s）`;
+    $('dopTag').textContent = up ? '📡 地平線上' : '地平線下';
+    $('dopTag').classList.toggle('up', up);
+  }
+
   // 時計（月日＋秒）とカウントダウン欄のマップ。通過中は 0.2 秒ごとに ISS の位置を更新
   let cdLastSec = -1, cdLive = false;
   setInterval(() => {
@@ -602,6 +673,7 @@
     } else if (cdLive) {
       cdLive = drawCdSky();
     }
+    updateDoppler();     // 最接近の前後は 1 秒に数十 Hz 以上変わるので 0.2 秒ごとに更新
   }, 200);
   let allPasses = [];
   let shownPasses = [];
