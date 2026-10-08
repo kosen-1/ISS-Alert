@@ -52,18 +52,6 @@
     }
     .card label.title { display: block; color: #9ca3d8; font-size: 12px; margin-bottom: 4px; }
 
-    input[type="datetime-local"] {
-      width: 100%;
-      font-size: 16px;
-      padding: 4px 8px;
-      border-radius: 8px;
-      border: 1px solid #3a3a7a;
-      background: #0b0b20;
-      color: #eef0ff;
-      -webkit-appearance: none;
-      appearance: none;
-      min-height: 36px;
-    }
 
     /* 地図の下は 2 列：左にドップラー補正とカウントダウン、右に大きな天空図 */
     .dash { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 8px; margin-bottom: 8px; }
@@ -74,20 +62,10 @@
     .sky-card .sky-wrap { flex: 1; width: 100%; position: relative; min-height: 0; }
     .sky-card canvas { display: block; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 
-    /* 目標時刻・オプションの欄（KOSEN-1 Tracker の opt-card と同じ詰め方） */
-    .opt-card { padding: 4px 8px 4px 10px; display: flex; flex-direction: column; gap: 3px; }
-    .opt-card .row { display: flex; align-items: center; gap: 6px; }
-    .opt-card .row > span { font-size: 11px; color: #9ca3d8; white-space: nowrap; }
-    .opt-card input[type="datetime-local"] { flex: 1; min-width: 0; min-height: 30px; padding: 2px 6px; }
-    .quick { display: flex; gap: 4px; }
-    .quick button {
-      background: #1e1e45; color: #c8ccf0;
-      border: 1px solid #3a3a7a; border-radius: 6px;
-      font-size: 11.5px; padding: 2px 6px; white-space: nowrap;
-    }
+    /* オプションの欄（KOSEN-1 Tracker の opt-card と同じ詰め方） */
+    .opt-card { padding: 4px 8px 4px 10px; display: flex; align-items: center; gap: 6px; }
     .opt { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: #c8ccf0; white-space: nowrap; }
     .opt input { width: 14px; height: 14px; }
-    .opt-card .row .opt { margin-left: auto; }
 
     .countdown {
       display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
@@ -127,7 +105,7 @@
     }
     #startBtn { background: #1d4ed8; flex: 2; }
     #stopBtn  { background: #7f1d1d; }
-    #testBtn  { background: #1e1e45; color: #c8ccf0; border: 1px solid #3a3a7a; font-size: 14px; }
+    #statusBtn { background: #1e1e45; color: #c8ccf0; border: 1px solid #3a3a7a; font-size: 14px; }
     .btns button:disabled { background: #1e2a3a; color: #556; }
 
     .note { font-size: 12px; color: #9098c8; line-height: 1.7; }
@@ -267,23 +245,12 @@
   </div>
   </div>
   <div class="card opt-card">
-    <div class="row">
-      <span>目標</span>
-      <input type="datetime-local" id="target" step="1" aria-label="目標時刻（パス一覧から自動設定・手入力可）">
-    </div>
-    <div class="row">
-      <div class="quick">
-        <button data-min="1">+1分後</button>
-        <button data-min="6">+6分後</button>
-        <button data-min="10">+10分後</button>
-      </div>
-      <label class="opt"><input type="checkbox" id="lastTen">最後の10秒は毎秒</label>
-    </div>
+    <label class="opt"><input type="checkbox" id="lastTen">最後の10秒は毎秒</label>
   </div>
   <div class="btns" style="margin-bottom:8px">
     <button id="startBtn">開始</button>
     <button id="stopBtn" disabled>停止</button>
-    <button id="testBtn">🔊 テスト</button>
+    <button id="statusBtn">📢 状況</button>
   </div>
   <div class="warn" id="warn"></div>
 
@@ -308,12 +275,13 @@
     <ul>
       <li>起動時に次の ISS パスの最大仰角時刻を自動で目標に設定します。パスをタップすると切り替えられます。</li>
       <li>観測地点は南国市です。「📍 現在地」で端末の位置に切り替えると、その地点でパスを計算し直します（地点は端末に記憶します）。</li>
-      <li>指定時刻の 5 分前から 5 秒ごとに「あと○秒」、通過後は 5 分間「○秒経過」と読み上げます。</li>
+      <li>最大仰角の 5 分前から 5 秒ごとに「あと○秒」、通過後は 5 分間「○秒経過」と読み上げます。</li>
+      <li>「📢 状況」を押すと、選択中のパス（なければ直近のパス）の最大仰角までの時間を読み上げます。</li>
       <li>上の欄に、ISS のクロスバンドレピーターの下り 437.800 MHz をドップラー補正したリアルタイムの受信周波数を表示します（観測地点基準）。</li>
-      <li class="ios-only">iPhone では最初に「開始」か「🔊 テスト」をタップしないと音声が出ません。</li>
+      <li class="ios-only">iPhone では最初に「開始」か「📢 状況」をタップしないと音声が出ません。</li>
       <li class="ios-only">カウントダウン中は Safari を前面に表示したままにしてください（画面ロック・アプリ切替で停止します）。対応機種では自動で画面スリープを防止します。</li>
       <li class="ios-only">音量ボタンで音量を上げ、消音モードも確認してください。</li>
-      <li class="android-only">最初に「🔊 テスト」で「あと300秒」と聞こえるか確認してください。</li>
+      <li class="android-only">最初に「📢 状況」を押して読み上げが聞こえるか確認してください。</li>
       <li class="android-only">声が出ない・日本語にならない場合は、端末の「設定」→「システム」→「言語と入力」→「テキスト読み上げの出力」で「Google 音声サービス」の日本語音声データをインストールしてください（項目名は機種により異なります）。</li>
       <li class="android-only">カウントダウン中は Chrome を前面に表示したままにしてください（画面オフ・アプリ切替で停止します）。画面スリープは自動で防止します。</li>
       <li class="android-only">音量ボタンで「メディア」の音量を上げ、マナーモードも確認してください。</li>
@@ -327,7 +295,6 @@
   const TRAIL_SEC = 300;     // 通過後に何秒まで読み上げるか
 
   const $ = id => document.getElementById(id);
-  const targetInput = $('target');
 
   let targetMs = null;
   let schedule = [];         // 読み上げる残り秒数（降順）
@@ -337,20 +304,7 @@
   let jaVoice = null;
   let selectedPass = null;   // パス一覧から選んだ場合のみセット
 
-  // ---------- 時刻入力 ----------
   const pad = n => String(n).padStart(2, '0');
-  function toLocalInput(d) {
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-  function setRelative(min) {
-    const d = new Date(Date.now() + min * 60000);
-    d.setMilliseconds(0);
-    targetInput.value = toLocalInput(d);
-  }
-  document.querySelectorAll('.quick button').forEach(b =>
-    b.addEventListener('click', () => { setRelative(Number(b.dataset.min)); selectPass(null); }));
-  targetInput.addEventListener('input', () => selectPass(null));
-  setRelative(6);
 
   // ---------- 音声 ----------
   function pickVoice() {
@@ -457,10 +411,10 @@
   }
 
   function start() {
-    if (!targetInput.value) { alert('時刻を入力してください'); return; }
-    const t = new Date(targetInput.value).getTime();
-    if (isNaN(t)) { alert('時刻が不正です'); return; }
-    if (t <= Date.now()) { alert('過去の時刻です'); return; }
+    // 目標は選択中のパスの最大仰角時刻（通過後の「○秒経過」の間までは開始できる）
+    if (!selectedPass) { alert('パスを選択してください'); return; }
+    const t = selectedPass.maxElTime.getTime();
+    if (t + TRAIL_SEC * 1000 <= Date.now()) { alert('このパスは終わっています'); return; }
 
     targetMs = t;
     schedule = buildSchedule();
@@ -469,17 +423,12 @@
     nextIdx = schedule.findIndex(s => s * 1000 < remMs);
     if (nextIdx < 0) nextIdx = schedule.length;
 
-    const d = new Date(targetMs);
-    if (!selectedPass) $('targetLabel').textContent = `目標 ${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-
     // タップ操作の中で一度話すことで iOS の音声ロックを解除する
-    speak('カウントダウンを開始します' +
-      (selectedPass ? `。最大仰角${Math.round(selectedPass.maxEl)}度、${dirJa(selectedPass.maxElAz)}の空です` : ''));
+    speak(`カウントダウンを開始します。最大仰角${Math.round(selectedPass.maxEl)}度、${dirJa(selectedPass.maxElAz)}の空です`);
     acquireWakeLock();
 
     $('startBtn').disabled = true;
     $('stopBtn').disabled = false;
-    targetInput.disabled = true;
     $('lastTen').disabled = true;
     $('geoBtn').disabled = $('homeBtn').disabled = true;
     document.body.classList.add('running');
@@ -495,7 +444,6 @@
     releaseWakeLock();
     $('startBtn').disabled = false;
     $('stopBtn').disabled = true;
-    targetInput.disabled = false;
     $('lastTen').disabled = false;
     $('geoBtn').disabled = $('homeBtn').disabled = false;
     document.body.classList.remove('running');
@@ -511,7 +459,21 @@
 
   $('startBtn').addEventListener('click', start);
   $('stopBtn').addEventListener('click', () => finish(true));
-  $('testBtn').addEventListener('click', () => speak(phrase(300)));
+  // 「📢 状況」：選択中のパス（なければ直近のパス）の最大仰角までの時間を読み上げる（KOSEN-1 Tracker と同じ）
+  function durText(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    if (s >= 3600) return `${Math.floor(s / 3600)}時間${Math.floor(s % 3600 / 60)}分後`;
+    if (s >= 60) return `${Math.floor(s / 60)}分後`;
+    return `${s}秒後`;
+  }
+  function statusText() {
+    const now = Date.now();
+    const p = selectedPass && selectedPass.losTime > now ? selectedPass : allPasses.find(q => q.losTime > now);
+    if (!p) return '今後 3 日間にパスはありません';
+    if (now < p.maxElTime) return (now >= p.aosTime ? 'いま通過中です。' : '') + `最大仰角は${durText(p.maxElTime - now)}です`;
+    return `いま通過中です。LOSは${durText(p.losTime - now)}です`;
+  }
+  $('statusBtn').addEventListener('click', () => speak(statusText()));
 
   // ================= ISS パス予測（iPhone-ISS と同じ計算） =================
   // 観測地点：既定は南国市役所。「現在地」で取得した地点は端末に記憶する
@@ -1012,9 +974,8 @@
   function selectPass(p) {
     selectedPass = p;
     if (p) {
-      targetInput.value = toLocalInput(p.maxElTime);
       $('targetLabel').textContent =
-        `最大仰角 ${p.maxEl.toFixed(0)}°・${dirJa(p.maxElAz)}`;   // 日時は右の MEL と目標時刻の欄に出ている
+        `最大仰角 ${p.maxEl.toFixed(0)}°・${dirJa(p.maxElAz)}`;   // 日時は右の MEL に出ている
       if (!timer) $('phase').textContent = '「開始」を押してください';
     } else if (!timer) {
       $('targetLabel').textContent = '';
@@ -1022,7 +983,7 @@
     renderPasses();
     drawCdSky();
   }
-  // 一覧の先頭（＝次のパス）を目標にする。手入力中や実行中は触らない
+  // 一覧の先頭（＝次のパス）を目標にする。実行中は触らない
   function autoSelect() {
     if (timer) return;
     renderPasses();
@@ -1047,7 +1008,7 @@
       autoSelect();
     } catch (e) {
       st.className = 'status error'; st.textContent = 'エラー: ' + e.message;
-      $('passList').innerHTML = `<div class="no-data">パス予測を取得できませんでした。時刻は手入力してください。</div>`;
+      $('passList').innerHTML = `<div class="no-data">パス予測を取得できませんでした。「更新」で取り直してください。</div>`;
     }
     $('refreshBtn').disabled = false;
   }
@@ -1130,7 +1091,7 @@
     const m = $('map');
     const bottom = $('startBtn').getBoundingClientRect().bottom + window.scrollY;
     const h = Math.round(m.clientHeight + (window.innerHeight - 4) - bottom);
-    let nh = Math.max(140, Math.min(420, h));   // 目標時刻の欄がある分、KOSEN-1 Tracker（150）より低くまで許す
+    let nh = Math.max(150, Math.min(420, h));
     if (timer) nh = Math.min(nh, m.clientHeight);
     if (Math.abs(nh - m.clientHeight) > 2) { m.style.height = nh + 'px'; map.invalidateSize(); }
   }
