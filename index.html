@@ -84,11 +84,12 @@
     /* 狭い列で 2 行になることがあるので、2 行分の高さを確保しておく */
     .countdown .phase { font-size: 13px; color: #9ca3d8; min-height: 3em; }
     .countdown .big {
-      font-size: 36px; font-weight: 700;
+      font-size: 32px; font-weight: 700;   /* 「10:18:31」が左の欄からはみ出さない大きさ */
       font-variant-numeric: tabular-nums;
       color: #eef0ff;
       line-height: 1;
-      margin: 2px 0;
+      white-space: nowrap;
+      margin: 2px -8px;   /* 左右の余白まで使って中央に置く（狭い画面でも右だけはみ出さないように） */
     }
     .countdown.active .big { color: #fcd34d; }
     .countdown.done .big   { color: #4ade80; }
