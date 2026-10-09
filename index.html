@@ -80,7 +80,7 @@
     .cd-times .mel { color: #fbbf24; text-align: center; }
     .cd-times b { display: block; font-size: 10.5px; color: #eef0ff; white-space: nowrap; }
     .cd-times .aos { color: #4ade80; }
-    .cd-times .los { color: #f87171; text-align: right; }
+    .cd-times .los { color: #fb923c; text-align: right; }
     /* 狭い列で 2 行になることがあるので、2 行分の高さを確保しておく */
     .countdown .phase { font-size: 13px; color: #9ca3d8; min-height: 3em; }
     .countdown .big {
@@ -162,6 +162,10 @@
     .col.center { text-align: center; }
     .col.right  { text-align: right; }
     .col label  { display: block; color: #9ca3d8; margin-bottom: 2px; font-size: 12px; }
+    /* パス表示の見出し：AOS は緑、最大仰角は黄、LOS はオレンジ */
+    .pass-row .col:nth-child(1) label { color: #4ade80; }
+    .pass-row .col:nth-child(2) label { color: #fbbf24; }
+    .pass-row .col:nth-child(3) label { color: #fb923c; }
     .col .t     { color: #b0bcff; font-weight: 600; font-size: 14px; }
     .col .az    { color: #b0b6e0; font-size: 13px; }
     .pass-minimap { flex-shrink: 0; width: 88px; height: 88px; }
@@ -868,7 +872,7 @@
     };
     mkr(pass.aosAz,   pass.points[0].el,     '#4ade80');
     mkr(pass.maxElAz, pass.maxEl,            '#fbbf24');
-    mkr(pass.losAz,   pass.points.at(-1).el, '#f87171');
+    mkr(pass.losAz,   pass.points.at(-1).el, '#fb923c');
 
     // 通過中は ISS の現在位置を重ねる
     if (live && live.el > 0) {
