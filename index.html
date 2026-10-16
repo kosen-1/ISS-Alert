@@ -40,6 +40,12 @@
       background: #1d4ed8; color: #fff;
       font-size: 17px; font-weight: 600; padding: 1px 7px; border-radius: 4px; white-space: nowrap;   /* 左のタイトルと同じ大きさ */
     }
+    /* ISS の 4K ライブ映像（YouTube）へのリンク。見出しの右端に置く */
+    .live-btn {
+      margin-left: auto; flex-shrink: 0;
+      background: #1e1e45; color: #c8ccf0; border: 1px solid #3a3a7a; border-radius: 6px;
+      font-size: 12px; font-weight: 600; padding: 4px 8px; text-decoration: none; white-space: nowrap;
+    }
 
     main { max-width: 480px; margin: 0 auto; padding: 8px 0 32px; }
 
@@ -201,6 +207,7 @@
 <header>
   <h1>🛰 ISS Alert</h1>
   <span class="badge">カウントダウン</span>
+  <a class="live-btn" href="https://www.youtube.com/watch?v=fO9e9jnhYK8" target="_blank" rel="noopener">Live4K</a>
 </header>
 
 <main>
@@ -282,6 +289,7 @@
       <li>観測地点は南国市です。「📍 現在地」で端末の位置に切り替えると、その地点でパスを計算し直します（地点は端末に記憶します）。</li>
       <li>最大仰角の 5 分前から 5 秒ごとに「あと○秒」、通過後は 5 分間「○秒経過」と読み上げます。</li>
       <li>「📢 状況」を押すと、選択中のパス（なければ直近のパス）の最大仰角までの時間を読み上げます。</li>
+      <li>右上の「Live4K」で、ISS の 4K カメラのライブ映像（YouTube）を新しいタブで開きます。カウントダウン中に押すと画面が YouTube に切り替わってカウントダウンが止まるので、ライブ映像は開始前に見るか、別の端末で見てください。</li>
       <li>上の欄に、ISS のクロスバンドレピーターの下り 437.800 MHz をドップラー補正したリアルタイムの受信周波数を表示します（観測地点基準）。</li>
       <li class="ios-only">iPhone では最初に「開始」か「📢 状況」をタップしないと音声が出ません。</li>
       <li class="ios-only">カウントダウン中は Safari を前面に表示したままにしてください（画面ロック・アプリ切替で停止します）。対応機種では自動で画面スリープを防止します。</li>
